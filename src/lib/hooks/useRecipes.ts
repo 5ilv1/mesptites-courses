@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { pullMealPlans, pullShoppingItems } from "@/lib/dexie/sync";
 import type {
   RecipeRow,
   RecipeIngredientRow,
@@ -148,4 +149,11 @@ export async function planRecipe(args: {
     p_add_to_shopping: args.add_to_shopping,
   });
   if (error) throw error;
+  // L'RPC modifie meal_plans (+ éventuellement shopping_items). Forcer un
+  // repull immédiat plutôt que dépendre du realtime, dont la latence peut
+  // dépasser le temps de fermeture du modal.
+  await Promise.all([
+    pullMealPlans(args.household_id),
+    args.add_to_shopping ? pullShoppingItems(args.household_id) : Promise.resolve(),
+  ]);
 }

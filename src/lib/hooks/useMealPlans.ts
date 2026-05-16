@@ -72,11 +72,15 @@ export async function upsertMealPlan(plan: {
     .from("meal_plans")
     .upsert(row, { onConflict: "household_id,date,slot" });
   if (error) throw error;
+  // Filet de sécurité : repull si realtime tarde (ou disparait)
+  await pullMealPlans(plan.household_id);
 }
 
 export async function deleteMealPlan(id: string) {
+  const existing = await db().meal_plans.get(id);
   await db().meal_plans.delete(id);
   const supabase = createClient();
   const { error } = await supabase.from("meal_plans").delete().eq("id", id);
   if (error) throw error;
+  if (existing) await pullMealPlans(existing.household_id);
 }
