@@ -57,9 +57,15 @@ export async function upsertMealPlan(plan: {
   title: string;
   notes: string | null;
   created_by: string;
+  recipe_id?: string | null;
 }) {
   const now = new Date().toISOString();
-  const row = { ...plan, created_at: now, updated_at: now };
+  const row = {
+    ...plan,
+    recipe_id: plan.recipe_id ?? null,
+    created_at: now,
+    updated_at: now,
+  };
   await db().meal_plans.put(row);
   const supabase = createClient();
   const { error } = await supabase

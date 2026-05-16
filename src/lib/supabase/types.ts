@@ -55,6 +55,7 @@ export type Database = {
           slot: "lunch" | "dinner";
           title: string;
           notes: string | null;
+          recipe_id: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -66,11 +67,58 @@ export type Database = {
           slot: "lunch" | "dinner";
           title: string;
           notes?: string | null;
+          recipe_id?: string | null;
           created_by: string;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["courses"]["Tables"]["meal_plans"]["Insert"]>;
+        Relationships: [];
+      };
+      recipes: {
+        Row: {
+          id: string;
+          household_id: string;
+          name: string;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          name: string;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["courses"]["Tables"]["recipes"]["Insert"]>;
+        Relationships: [];
+      };
+      recipe_ingredients: {
+        Row: {
+          id: string;
+          recipe_id: string;
+          name: string;
+          quantity: string | null;
+          category: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipe_id: string;
+          name: string;
+          quantity?: string | null;
+          category?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["courses"]["Tables"]["recipe_ingredients"]["Insert"]
+        >;
         Relationships: [];
       };
       shopping_items: {
@@ -140,6 +188,16 @@ export type Database = {
         Args: { p_token: string; p_display_name: string };
         Returns: string;
       };
+      plan_recipe: {
+        Args: {
+          p_household_id: string;
+          p_date: string;
+          p_slot: "lunch" | "dinner";
+          p_recipe_id: string;
+          p_add_to_shopping?: boolean;
+        };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -152,3 +210,6 @@ export type HouseholdMemberRow =
 export type MealPlanRow = Database["courses"]["Tables"]["meal_plans"]["Row"];
 export type ShoppingItemRow =
   Database["courses"]["Tables"]["shopping_items"]["Row"];
+export type RecipeRow = Database["courses"]["Tables"]["recipes"]["Row"];
+export type RecipeIngredientRow =
+  Database["courses"]["Tables"]["recipe_ingredients"]["Row"];

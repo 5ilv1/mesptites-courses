@@ -48,11 +48,12 @@ export default async function AppLayout({
 
         <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-stone-200 bg-white">
           <div
-            className="mx-auto grid max-w-2xl grid-cols-3"
+            className="mx-auto grid max-w-2xl grid-cols-4"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <NavLink href="/list" label="Liste" icon="🛒" />
             <NavLink href="/planning" label="Repas" icon="🍽️" />
+            <NavLink href="/recipes" label="Recettes" icon="📖" />
             <NavLink href="/foyer" label="Foyer" icon="👨‍👩‍👦" />
           </div>
         </nav>
