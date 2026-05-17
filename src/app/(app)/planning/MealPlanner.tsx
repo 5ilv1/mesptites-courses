@@ -20,6 +20,8 @@ const DAY_LABELS = [
   "Samedi",
 ];
 
+const DAY_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
 function startOfWeek(d: Date) {
   const day = d.getDay();
   const diff = (day + 6) % 7;
@@ -98,33 +100,45 @@ export default function MealPlanner() {
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
         {days.map((d) => {
           const dateStr = isoDate(d);
           const isToday = dateStr === isoDate(new Date());
           return (
             <div
               key={dateStr}
-              className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${
+              className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm ${
                 isToday
                   ? "border-green-500 ring-1 ring-green-200"
                   : "border-stone-200"
               }`}
             >
-              <div className="flex items-baseline justify-between border-b border-stone-100 px-4 py-2">
-                <div className="font-medium">
-                  {DAY_LABELS[d.getDay()]}{" "}
-                  <span className="text-sm text-stone-500">
+              <div
+                className={`flex items-center justify-between border-b border-stone-100 px-3 py-2 ${
+                  isToday ? "bg-green-50" : ""
+                }`}
+              >
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-stone-500">
+                    <span className="lg:hidden">{DAY_LABELS[d.getDay()]}</span>
+                    <span className="hidden lg:inline">
+                      {DAY_SHORT[d.getDay()]}
+                    </span>
+                  </div>
+                  <div className="text-sm font-semibold leading-tight">
                     {d.getDate()}/{d.getMonth() + 1}
-                  </span>
+                  </div>
                 </div>
                 {isToday && (
-                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                    Aujourd&apos;hui
+                  <span
+                    title="Aujourd'hui"
+                    className="rounded-full bg-green-600 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                  >
+                    •
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 divide-x divide-stone-100">
+              <div className="grid flex-1 grid-cols-2 divide-x divide-stone-100 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
                 <SlotCell
                   label="Midi"
                   plan={plansByKey.get(`${dateStr}::lunch`)}
@@ -178,19 +192,19 @@ function SlotCell({
   return (
     <button
       onClick={onOpen}
-      className="block w-full p-2 text-left transition hover:bg-stone-50"
+      className="block w-full flex-1 p-2 text-left transition hover:bg-stone-50"
     >
-      <div className="text-[10px] uppercase tracking-wide text-stone-400">
-        {label}
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-stone-400">
+        <span>{label}</span>
+        {plan?.recipe_id && (
+          <span title="Issue d'une recette enregistrée">📖</span>
+        )}
       </div>
       <div
-        className={`mt-1 text-sm ${plan ? "text-stone-900" : "text-stone-400"}`}
+        className={`mt-1 line-clamp-2 text-sm leading-tight ${plan ? "text-stone-900" : "text-stone-400"}`}
       >
         {plan?.title ?? "+ Ajouter"}
       </div>
-      {plan?.recipe_id && (
-        <div className="mt-0.5 text-[10px] text-green-700">📖 recette</div>
-      )}
     </button>
   );
 }
