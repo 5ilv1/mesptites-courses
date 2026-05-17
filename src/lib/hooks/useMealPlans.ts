@@ -84,3 +84,21 @@ export async function deleteMealPlan(id: string) {
   if (error) throw error;
   if (existing) await pullMealPlans(existing.household_id);
 }
+
+export async function moveMealPlan(
+  id: string,
+  newDate: string,
+  newSlot: "lunch" | "dinner"
+) {
+  const existing = await db().meal_plans.get(id);
+  if (!existing) throw new Error("Repas introuvable en cache local");
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("meal_plans")
+    .update({ date: newDate, slot: newSlot })
+    .eq("id", id);
+  if (error) throw error;
+
+  await pullMealPlans(existing.household_id);
+}

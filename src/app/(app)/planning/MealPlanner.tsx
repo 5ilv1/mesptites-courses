@@ -1,11 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { useHousehold } from "@/lib/HouseholdContext";
 import {
   useMealPlans,
   upsertMealPlan,
   deleteMealPlan,
+  moveMealPlan,
 } from "@/lib/hooks/useMealPlans";
 import { useRecipes, planRecipe } from "@/lib/hooks/useRecipes";
 import type { MealPlanRow } from "@/lib/supabase/types";
@@ -35,6 +46,8 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+type SlotKey = `${string}::${"lunch" | "dinner"}`;
+
 type SlotTarget = {
   date: string;
   slot: "lunch" | "dinner";
@@ -45,6 +58,7 @@ export default function MealPlanner() {
   const { userId, householdId } = useHousehold();
   const [weekOffset, setWeekOffset] = useState(0);
   const [target, setTarget] = useState<SlotTarget | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const { recipes } = useRecipes(householdId);
 
   const monday = useMemo(() => {
@@ -67,104 +81,163 @@ export default function MealPlanner() {
   const plans = useMealPlans(householdId, isoDates);
 
   const plansByKey = useMemo(() => {
-    const m = new Map<string, MealPlanRow>();
-    for (const p of plans) m.set(`${p.date}::${p.slot}`, p);
+    const m = new Map<SlotKey, MealPlanRow>();
+    for (const p of plans) m.set(`${p.date}::${p.slot}` as SlotKey, p);
     return m;
   }, [plans]);
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setWeekOffset(weekOffset - 1)}
-          className="rounded-xl bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-stone-100"
-        >
-          ← Semaine
-        </button>
-        <h2 className="text-sm font-medium text-stone-600">
-          {monday.toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "short",
-          })}{" "}
-          –{" "}
-          {days[6].toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "short",
-          })}
-        </h2>
-        <button
-          onClick={() => setWeekOffset(weekOffset + 1)}
-          className="rounded-xl bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-stone-100"
-        >
-          Semaine →
-        </button>
-      </div>
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 6 },
+    })
+  );
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
-        {days.map((d) => {
-          const dateStr = isoDate(d);
-          const isToday = dateStr === isoDate(new Date());
-          return (
-            <div
-              key={dateStr}
-              className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm ${
-                isToday
-                  ? "border-green-500 ring-1 ring-green-200"
-                  : "border-stone-200"
-              }`}
-            >
+  async function handleDragEnd(e: DragEndEvent) {
+    setMoveError(null);
+    const { active, over } = e;
+    if (!over) return;
+    const activeKey = String(active.id) as SlotKey;
+    const overKey = String(over.id) as SlotKey;
+    if (activeKey === overKey) return;
+
+    const source = plansByKey.get(activeKey);
+    if (!source) return;
+
+    const targetPlan = plansByKey.get(overKey);
+    if (targetPlan) {
+      setMoveError(
+        "Ce créneau est déjà occupé. Vide-le d'abord (croix rouge), puis recommence."
+      );
+      return;
+    }
+
+    const [newDate, newSlot] = overKey.split("::") as [
+      string,
+      "lunch" | "dinner",
+    ];
+    try {
+      await moveMealPlan(source.id, newDate, newSlot);
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : "Erreur de déplacement");
+    }
+  }
+
+  async function handleQuickDelete(plan: MealPlanRow) {
+    await deleteMealPlan(plan.id);
+  }
+
+  return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setWeekOffset(weekOffset - 1)}
+            className="rounded-xl bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-stone-100"
+          >
+            ← Semaine
+          </button>
+          <h2 className="text-sm font-medium text-stone-600">
+            {monday.toLocaleDateString("fr-FR", {
+              day: "numeric",
+              month: "short",
+            })}{" "}
+            –{" "}
+            {days[6].toLocaleDateString("fr-FR", {
+              day: "numeric",
+              month: "short",
+            })}
+          </h2>
+          <button
+            onClick={() => setWeekOffset(weekOffset + 1)}
+            className="rounded-xl bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-stone-100"
+          >
+            Semaine →
+          </button>
+        </div>
+
+        {moveError && (
+          <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {moveError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">
+          {days.map((d) => {
+            const dateStr = isoDate(d);
+            const isToday = dateStr === isoDate(new Date());
+            return (
               <div
-                className={`flex items-center justify-between border-b border-stone-100 px-3 py-2 ${
-                  isToday ? "bg-green-50" : ""
+                key={dateStr}
+                className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm ${
+                  isToday
+                    ? "border-green-500 ring-1 ring-green-200"
+                    : "border-stone-200"
                 }`}
               >
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-stone-500">
-                    <span className="lg:hidden">{DAY_LABELS[d.getDay()]}</span>
-                    <span className="hidden lg:inline">
-                      {DAY_SHORT[d.getDay()]}
+                <div
+                  className={`flex items-center justify-between border-b border-stone-100 px-3 py-2 ${
+                    isToday ? "bg-green-50" : ""
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-stone-500">
+                      <span className="lg:hidden">{DAY_LABELS[d.getDay()]}</span>
+                      <span className="hidden lg:inline">
+                        {DAY_SHORT[d.getDay()]}
+                      </span>
+                    </div>
+                    <div className="text-sm font-semibold leading-tight">
+                      {d.getDate()}/{d.getMonth() + 1}
+                    </div>
+                  </div>
+                  {isToday && (
+                    <span
+                      title="Aujourd'hui"
+                      className="rounded-full bg-green-600 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                    >
+                      •
                     </span>
-                  </div>
-                  <div className="text-sm font-semibold leading-tight">
-                    {d.getDate()}/{d.getMonth() + 1}
-                  </div>
+                  )}
                 </div>
-                {isToday && (
-                  <span
-                    title="Aujourd'hui"
-                    className="rounded-full bg-green-600 px-1.5 py-0.5 text-[10px] font-medium text-white"
-                  >
-                    •
-                  </span>
-                )}
+
+                <div className="flex flex-1 flex-col divide-y divide-stone-100">
+                  <SlotCell
+                    slotKey={`${dateStr}::lunch`}
+                    label="Midi"
+                    plan={plansByKey.get(`${dateStr}::lunch`)}
+                    onOpen={() =>
+                      setTarget({
+                        date: dateStr,
+                        slot: "lunch",
+                        current: plansByKey.get(`${dateStr}::lunch`),
+                      })
+                    }
+                    onQuickDelete={handleQuickDelete}
+                  />
+                  <SlotCell
+                    slotKey={`${dateStr}::dinner`}
+                    label="Soir"
+                    plan={plansByKey.get(`${dateStr}::dinner`)}
+                    onOpen={() =>
+                      setTarget({
+                        date: dateStr,
+                        slot: "dinner",
+                        current: plansByKey.get(`${dateStr}::dinner`),
+                      })
+                    }
+                    onQuickDelete={handleQuickDelete}
+                  />
+                </div>
               </div>
-              <div className="grid flex-1 grid-cols-2 divide-x divide-stone-100 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
-                <SlotCell
-                  label="Midi"
-                  plan={plansByKey.get(`${dateStr}::lunch`)}
-                  onOpen={() =>
-                    setTarget({
-                      date: dateStr,
-                      slot: "lunch",
-                      current: plansByKey.get(`${dateStr}::lunch`),
-                    })
-                  }
-                />
-                <SlotCell
-                  label="Soir"
-                  plan={plansByKey.get(`${dateStr}::dinner`)}
-                  onOpen={() =>
-                    setTarget({
-                      date: dateStr,
-                      slot: "dinner",
-                      current: plansByKey.get(`${dateStr}::dinner`),
-                    })
-                  }
-                />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        <p className="text-center text-xs text-stone-500">
+          Astuce : maintiens-clique (ou appui long sur mobile) un repas pour le
+          déplacer vers un autre créneau.
+        </p>
       </div>
 
       {target && (
@@ -176,36 +249,85 @@ export default function MealPlanner() {
           onClose={() => setTarget(null)}
         />
       )}
-    </div>
+    </DndContext>
   );
 }
 
 function SlotCell({
+  slotKey,
   label,
   plan,
   onOpen,
+  onQuickDelete,
 }: {
+  slotKey: SlotKey;
   label: string;
   plan: MealPlanRow | undefined;
   onOpen: () => void;
+  onQuickDelete: (plan: MealPlanRow) => void | Promise<void>;
 }) {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotKey });
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({
+    id: slotKey,
+    disabled: !plan,
+  });
+
+  const setRef = (node: HTMLElement | null) => {
+    setDropRef(node);
+    setDragRef(node);
+  };
+
+  const acceptingDrop = isOver && !plan;
+  const refusingDrop = isOver && plan;
+
   return (
-    <button
-      onClick={onOpen}
-      className="block w-full flex-1 p-2 text-left transition hover:bg-stone-50"
+    <div
+      ref={setRef}
+      className={`relative flex-1 transition ${
+        isDragging ? "opacity-40" : ""
+      } ${acceptingDrop ? "bg-green-50 ring-2 ring-inset ring-green-400" : ""} ${
+        refusingDrop ? "bg-red-50 ring-2 ring-inset ring-red-300" : ""
+      }`}
     >
-      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-stone-400">
-        <span>{label}</span>
-        {plan?.recipe_id && (
-          <span title="Issue d'une recette enregistrée">📖</span>
-        )}
-      </div>
-      <div
-        className={`mt-1 line-clamp-2 text-sm leading-tight ${plan ? "text-stone-900" : "text-stone-400"}`}
+      <button
+        onClick={onOpen}
+        {...(plan ? listeners : {})}
+        {...(plan ? attributes : {})}
+        className="block w-full p-2 pr-7 text-left transition hover:bg-stone-50 touch-none"
       >
-        {plan?.title ?? "+ Ajouter"}
-      </div>
-    </button>
+        <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-stone-400">
+          <span>{label}</span>
+          {plan?.recipe_id && (
+            <span title="Issue d'une recette enregistrée">📖</span>
+          )}
+        </div>
+        <div
+          className={`mt-1 line-clamp-2 text-sm leading-tight ${plan ? "text-stone-900" : "text-stone-400"}`}
+        >
+          {plan?.title ?? "+ Ajouter"}
+        </div>
+      </button>
+
+      {plan && (
+        <button
+          type="button"
+          aria-label={`Supprimer ${label.toLowerCase()}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onQuickDelete(plan);
+          }}
+          className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-stone-300 transition hover:bg-red-100 hover:text-red-600"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
