@@ -14,7 +14,22 @@ export async function pullShoppingItems(householdId: string) {
     .select("*")
     .eq("household_id", householdId);
   if (error) throw error;
-  await db().shopping_items.bulkPut(data as ShoppingItemRow[]);
+
+  const rows = (data ?? []) as ShoppingItemRow[];
+  const serverIds = new Set(rows.map((r) => r.id));
+
+  // Supprime les items locaux qui n'existent plus côté serveur
+  // (sinon les DELETE distants ne se répercutent jamais dans Dexie).
+  const localIds = await db()
+    .shopping_items.where("household_id")
+    .equals(householdId)
+    .primaryKeys();
+  const toDelete = localIds.filter((id) => !serverIds.has(id));
+  if (toDelete.length > 0) {
+    await db().shopping_items.bulkDelete(toDelete);
+  }
+
+  await db().shopping_items.bulkPut(rows);
 }
 
 export async function pullMealPlans(householdId: string) {
@@ -24,7 +39,20 @@ export async function pullMealPlans(householdId: string) {
     .select("*")
     .eq("household_id", householdId);
   if (error) throw error;
-  await db().meal_plans.bulkPut(data as MealPlanRow[]);
+
+  const rows = (data ?? []) as MealPlanRow[];
+  const serverIds = new Set(rows.map((r) => r.id));
+
+  const localIds = await db()
+    .meal_plans.where("household_id")
+    .equals(householdId)
+    .primaryKeys();
+  const toDelete = localIds.filter((id) => !serverIds.has(id));
+  if (toDelete.length > 0) {
+    await db().meal_plans.bulkDelete(toDelete);
+  }
+
+  await db().meal_plans.bulkPut(rows);
 }
 
 export async function enqueue(mut: Omit<PendingMutation, "id" | "queued_at">) {
