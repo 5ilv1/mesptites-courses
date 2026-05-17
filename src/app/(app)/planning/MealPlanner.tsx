@@ -274,7 +274,7 @@ function SlotEditor({
   return (
     <div
       className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
-      onClick={onClose}
+      onClick={busy ? undefined : onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -355,7 +355,17 @@ function SlotEditor({
             disabled={busy}
             className="flex-1 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
           >
-            {busy ? "…" : "Enregistrer"}
+            {busy ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                Enregistrement…
+              </span>
+            ) : (
+              "Enregistrer"
+            )}
           </button>
           {target.current && (
             <button
